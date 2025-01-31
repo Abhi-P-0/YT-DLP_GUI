@@ -1,0 +1,28 @@
+import yt_dlp
+import customtkinter
+
+class GUI:
+    def __init__(self):
+        self.root = customtkinter.CTk()
+        self.root.title('YT-DLP GUI')
+        self.root.resizable(0, 0)
+        self.SetupUI()
+        self.root.mainloop()
+
+    def SetupUI(self):
+        # Set appearance mode first
+        customtkinter.set_appearance_mode("System")  # Modes: system, light, dark
+        customtkinter.set_default_color_theme("blue")
+
+        # Get screen dimensions correctly
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # Set window size
+        self.root.geometry(f'{int(screen_width/1.5)}x{int(screen_height/1.5)}')
+
+        # Use CustomTkinter widgets
+        button = customtkinter.CTkButton(self.root, text="Click me!")
+        button.pack(padx=20, pady=20)
+
+app = GUI()
