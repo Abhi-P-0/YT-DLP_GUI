@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import filedialog
 import time
 import os, sys
 import yt_dlp
@@ -8,7 +9,7 @@ import threading
 from PIL import Image
 
 class GUI:
-
+    
     def __init__(self):
         self.root = ctk.CTk()
         self.root.title('YT-DLP GUI')
@@ -42,14 +43,14 @@ class GUI:
         self.dlButton.grid(row=0, column=2, padx=5, pady=5)
 
         # Setup File Output
-        urlLabel = ctk.CTkLabel(self.root, text="Output Folder")
-        urlLabel.grid(row=1, column=0, padx=5, pady=5)
-        self.urlInput = ctk.CTkEntry(self.root, width=int(self.height / 2))
-        self.urlInput.grid(row=1, column=1, padx=5, pady=5)
+        directoryLabel = ctk.CTkLabel(self.root, text="Output Folder")
+        directoryLabel.grid(row=1, column=0, padx=5, pady=5)
+        self.directoryInput = ctk.CTkEntry(self.root, width=int(self.height / 2))
+        self.directoryInput.grid(row=1, column=1, padx=5, pady=5)
 
         # Setup Download Button
-        self.dlButton = ctk.CTkButton(self.root, text="Directory")
-        self.dlButton.grid(row=1, column=2, padx=5, pady=5)
+        self.dirButton = ctk.CTkButton(self.root, text="Directory", command=self.SelectOutputDirectory)
+        self.dirButton.grid(row=1, column=2, padx=5, pady=5)
 
         # Thumbnail Image section
         #img = tk.PhotoImage(file="./ytdlpGUI.png")
@@ -63,67 +64,94 @@ class GUI:
         self.statusArea = ctk.CTkTextbox(self.root, height=int(self.width / 5), width=int(self.height / 3))#scrolledtext.ScrolledText(self.root, height=10)#ctk.CTkScrollableFrame(self.root, height=8)
         self.statusArea.grid(row=3, column=0, padx=5, pady=5, sticky='w', columnspan=2)
         self.statusArea.configure(state='disabled')
+
+        # Options for video panel
         
+    
+    def UI2(self):
+        # Configure grid layout (3x3)
+        self.root.grid_columnconfigure(0, weight=3)
+        self.root.grid_columnconfigure(1, weight=0)
+        self.root.grid_columnconfigure(2, weight=1)
+        self.root.grid_rowconfigure(1, weight=1)
+        self.root.grid_rowconfigure(2, weight=0)
         
-        # # Configure grid layout (3x3)
-        # self.root.grid_columnconfigure(0, weight=3)
-        # self.root.grid_columnconfigure(1, weight=0)
-        # self.root.grid_columnconfigure(2, weight=1)
-        # self.root.grid_rowconfigure(1, weight=1)
-        # self.root.grid_rowconfigure(2, weight=0)
+        # URL Entry and Button (row 0)
+        #self.url_label = ctk.CTkLabel(self.root, text="URL:")
+        #self.url_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
         
-        # # URL Entry and Button (row 0)
-        # #self.url_label = ctk.CTkLabel(self.root, text="URL:")
-        # #self.url_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        self.urlInput = ctk.CTkEntry(self.root)
+        self.urlInput.grid(row=0, column=0, padx=(0, 10), pady=10, sticky="nsew", columnspan=2)
         
-        # self.urlInput = ctk.CTkEntry(self.root)
-        # self.urlInput.grid(row=0, column=0, padx=(0, 10), pady=10, sticky="nsew", columnspan=2)
+        self.dlButton = ctk.CTkButton(self.root, text="Fetch", command=self.MainButton)
+        self.dlButton.grid(row=0, column=3, padx=10, pady=10, sticky="e")
         
-        # self.dlButton = ctk.CTkButton(self.root, text="Fetch", command=self.MainButton)
-        # self.dlButton.grid(row=0, column=3, padx=10, pady=10, sticky="e")
+        # Image Area (row 1)
+        self.imageFrame = ctk.CTkFrame(self.root, corner_radius=0)
+        self.imageFrame.grid(row=1, column=0, rowspan=2, padx=10, pady=10, sticky="nsew")
         
-        # # Image Area (row 1)
-        # self.imageFrame = ctk.CTkFrame(self.root, corner_radius=0)
-        # self.imageFrame.grid(row=1, column=0, rowspan=2, padx=10, pady=10, sticky="nsew")
+        self.imageLabel = ctk.CTkLabel(self.imageFrame, text="Image Area", fg_color="gray20", corner_radius=8)
+        self.imageLabel.pack(padx=10, pady=10, fill="both", expand=True)
         
-        # self.imageLabel = ctk.CTkLabel(self.imageFrame, text="Image Area", fg_color="gray20", corner_radius=8)
-        # self.imageLabel.pack(padx=10, pady=10, fill="both", expand=True)
+        # Scroll Area (right side)
+        self.optionsFrame = ctk.CTkScrollableFrame(self.root, label_text="Scroll Area")
+        self.optionsFrame.grid(row=1, column=2, rowspan=2, padx=(0, 10), pady=10, sticky="nsew", columnspan=2)
         
-        # # Scroll Area (right side)
-        # self.optionsFrame = ctk.CTkScrollableFrame(self.root, label_text="Scroll Area")
-        # self.optionsFrame.grid(row=1, column=2, rowspan=2, padx=(0, 10), pady=10, sticky="nsew", columnspan=2)
+        # Add some example widgets to scroll area
+        for i in range(10):
+            label = ctk.CTkLabel(self.optionsFrame, text=f"Item {i+1}")
+            label.pack(pady=2)
         
-        # # Add some example widgets to scroll area
-        # for i in range(10):
-        #     label = ctk.CTkLabel(self.optionsFrame, text=f"Item {i+1}")
-        #     label.pack(pady=2)
+        # Log Text Area (bottom left)
+        self.statusArea = ctk.CTkTextbox(self.root, height=100, corner_radius=8)
+        self.statusArea.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
+        self.statusArea.insert("0.0", "Log messages will appear here...\n\n")
+        self.statusArea.configure(state="disabled")
         
-        # # Log Text Area (bottom left)
-        # self.statusArea = ctk.CTkTextbox(self.root, height=100, corner_radius=8)
-        # self.statusArea.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
-        # self.statusArea.insert("0.0", "Log messages will appear here...\n\n")
-        # self.statusArea.configure(state="disabled")
-        
-        # # Configure weights for resizing
-        # self.imageFrame.grid_columnconfigure(0, weight=1)
-        # self.imageFrame.grid_rowconfigure(0, weight=1)
-        # self.optionsFrame.grid_columnconfigure(0, weight=1)
+        # Configure weights for resizing
+        self.imageFrame.grid_columnconfigure(0, weight=1)
+        self.imageFrame.grid_rowconfigure(0, weight=1)
+        self.optionsFrame.grid_columnconfigure(0, weight=1)
         
     def MainButton(self):
+        if self.directoryInput.get() == "":
+            self.SendStatusMessage("No output directory.")
+
+            return
+
         if not self.urlInput.get():
-             return
+            self.SendStatusMessage("No link.")
+
+            return
         
         threading.Thread(target=self.DLThread, args=(self.urlInput.get(), ), daemon=True).start()
 
     def DLThread(self, url):
+        try: # extract info from URL
+            with yt_dlp.YoutubeDL({'logger': self, 'noprogress' : True}) as ydls:
+                info_dict = ydls.extract_info(self.urlInput.get(), download=False)
+
+            # self.SendStatusMessage(info_dict)
+
+        except Exception as e:
+            self.SendStatusMessage(f'Error: {str(e)}')
+
+        if len(info_dict) < 1: # make sure information is extracted about the video in question
+            self.SendStatusMessage('Something went wrong with fetching information about the video.')
+
+            return
+
         ydl_opts = {
             'ignoreerrors': True,
             'progress_hooks': [self.ProgressBar],
             'logger': self,
-            'noprogress': True  # Disable default progress output
+            'noprogress': True,  # Disable default progress output
+            # 'outtmpl': f"{self.directoryInput.get()}/%(title)s.%(ext)s",
+            'outtmpl' : self.directoryInput.get() + info_dict.get('title') + '.' + info_dict.get('ext')
         }
+
         
-        try:
+        try: # download the video
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
 
@@ -168,5 +196,22 @@ class GUI:
 
             self.statusArea.see('end')  # Auto-scroll to bottom
             self.statusArea.configure(state='disabled')
+
+    def SelectOutputDirectory(self):
+        # Create a hidden root window
+        root = tk.Tk()
+        root.withdraw()  # Hide the main window
+
+        # Open the directory dialog
+        fileOutputPath = filedialog.askdirectory(
+            title="Select a Folder",
+            initialdir="~"  # Start at user's home directory
+        ) + '/'
+
+        # Destroy the root window after selection
+        root.destroy()
+        
+        self.directoryInput.delete(0, ctk.END)
+        self.directoryInput.insert(0, fileOutputPath)
 
 app = GUI()
