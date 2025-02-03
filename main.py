@@ -65,9 +65,18 @@ class GUI:
         self.statusArea.grid(row=3, column=0, padx=5, pady=5, sticky='w', columnspan=2)
         self.statusArea.configure(state='disabled')
 
-        # Options for video panel
+        # Options for video panel, Frame setup
+        self.optionsFrame = ctk.CTkScrollableFrame(self.root, label_text="Options")
+        self.optionsFrame.grid(row=2, column=1, padx=5, pady=5, stick='nse', rowspan=2, columnspan=2)
+
+        # Actual options setup here
+        ctk.CTkLabel(self.optionsFrame, text="Output Format: ").grid(row=0, column=0, pady=5)
+        self.outputFormat = ctk.CTkSegmentedButton(self.optionsFrame)
+        self.outputFormat.grid(row=0, column=1, pady=5)
+        self.outputFormat.configure(values=["Video", "Audio only"])
+        self.outputFormat.set('Video')
         
-    
+        
     def UI2(self):
         # Configure grid layout (3x3)
         self.root.grid_columnconfigure(0, weight=3)
@@ -141,7 +150,7 @@ class GUI:
 
             return
 
-        ydl_opts = {
+        ydl_opts = { # setup the default options
             'ignoreerrors': True,
             'progress_hooks': [self.ProgressBar],
             'logger': self,
@@ -150,6 +159,9 @@ class GUI:
             'outtmpl' : self.directoryInput.get() + info_dict.get('title') + '.' + info_dict.get('ext')
         }
 
+        ydl_opts =  self.UpdateOptionsConfiguration(ydl_opts, info_dict) # update the default options if needbe
+
+        self.SendStatusMessage(f'Output selected: {self.outputFormat.get()}')
         
         try: # download the video
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -159,6 +171,21 @@ class GUI:
 
         except Exception as e:
             self.SendStatusMessage(f"Error: {str(e)}")
+
+    def UpdateOptionsConfiguration(self, opts, info):
+        # Audio-only configuration
+        if self.outputFormat.get() == "Audio only":
+            opts.update({
+                'format': 'bestaudio/best',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+                'outtmpl': f"{self.directoryInput.get()}/%(title)s"
+            })
+
+        return opts
 
     def ProgressBar(self, d):
         if d['status'] == 'downloading':
