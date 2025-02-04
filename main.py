@@ -9,6 +9,8 @@ import threading
 from PIL import Image
 
 class GUI:
+
+    
     
     def __init__(self):
         self.root = ctk.CTk()
@@ -70,11 +72,22 @@ class GUI:
         self.optionsFrame.grid(row=2, column=1, padx=5, pady=5, stick='nse', rowspan=2, columnspan=2)
 
         # Actual options setup here
-        ctk.CTkLabel(self.optionsFrame, text="Output Format: ").grid(row=0, column=0, pady=5)
+        ctk.CTkLabel(self.optionsFrame, text="Output Format: ").grid(row=0, column=0, pady=5, padx=5)
         self.outputFormat = ctk.CTkSegmentedButton(self.optionsFrame)
         self.outputFormat.grid(row=0, column=1, pady=5)
         self.outputFormat.configure(values=["Video", "Audio only"])
         self.outputFormat.set('Video')
+
+        ctk.CTkLabel(self.optionsFrame, text="Video Quality: ").grid(row=1, column=0, pady=5, padx=5) # VIDEO QUALITY
+        self.vidQuality = ctk.CTkOptionMenu(self.optionsFrame, values=['144', '240', '480', '720', '1080', '1440', '2160'], dynamic_resizing=False)
+        self.vidQuality.grid(row=1, column=1, padx=5, pady=5)
+
+        ctk.CTkLabel(self.optionsFrame, text="Audio Quality: ").grid(row=2, column=0, pady=5, padx=5) # AUDIO QUALITY
+        self.audioQuality = ctk.CTkOptionMenu(self.optionsFrame, values=['32', '96', '128', '160', '192', '256'], dynamic_resizing=False)
+        self.audioQuality.grid(row=2, column=1, padx=5, pady=5)
+
+        self.splitChapters = ctk.CTkCheckBox(self.optionsFrame, text="Split by Chapters")
+        self.splitChapters.grid(row=3, column=0, padx=5, pady=5)
         
         
     def UI2(self):
@@ -150,19 +163,20 @@ class GUI:
 
             return
 
-        ydl_opts = { # setup the default options
-            'ignoreerrors': True,
-            'progress_hooks': [self.ProgressBar],
-            'logger': self,
-            'noprogress': True,  # Disable default progress output
-            # 'outtmpl': f"{self.directoryInput.get()}/%(title)s.%(ext)s",
-            'outtmpl' : self.directoryInput.get() + info_dict.get('title') + '.' + info_dict.get('ext')
-        }
+        # ydl_opts = { # setup the default options
+        #     'ignoreerrors': True,
+        #     'progress_hooks': [self.ProgressBar],
+        #     'logger': self,
+        #     'noprogress': True,  # Disable default progress output
+        #     # 'outtmpl': f"{self.directoryInput.get()}/%(title)s.%(ext)s",
+        #     'outtmpl' : self.directoryInput.get() + info_dict.get('title') + '.' + info_dict.get('ext')
+        # }
 
-        ydl_opts =  self.UpdateOptionsConfiguration(ydl_opts, info_dict) # update the default options if needbe
 
-        self.SendStatusMessage(f'Output selected: {self.outputFormat.get()}')
-        
+        ydl_opts =  self.UpdateOptionsConfiguration(info_dict) # update the default options if needbe
+
+        # self.SendStatusMessage(f'Vid quality: {self.videQuality.get()} | Audio Quality: {self.audioQuality.get()}')
+
         try: # download the video
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
@@ -172,15 +186,40 @@ class GUI:
         except Exception as e:
             self.SendStatusMessage(f"Error: {str(e)}")
 
-    def UpdateOptionsConfiguration(self, opts, info):
-        # Audio-only configuration
+    def UpdateOptionsConfiguration(self, info):
+        self.SendStatusMessage(f'\n{self.outputFormat.get()} mode. Video quality: {self.vidQuality.get()} Audio quality: {self.audioQuality.get()}\n')
+
+        opts = {
+            'format': f'bestvideo[height<={self.vidQuality.get()}]+bestaudio',
+            'ignoreerrors': True,
+            'progress_hooks': [self.ProgressBar],
+            'logger': self,
+            'noprogress': True,
+            'outtmpl': self.directoryInput.get() + info.get('title') + '.' + info.get('ext'),
+            # Removed 'postprocessors' to allow yt-dlp defaults (includes merger if needed)
+        }
+
+        if self.splitChapters.get():
+            self.SendStatusMessage('Splitting chapters into individual videos.')
+            # Ensure directory path ends with a separator
+            directory = self.directoryInput.get().rstrip('/\\') + '/'
+            opts.update({
+                'outtmpl': f"{directory}%(title)s [%(chapter)s].%(ext)s",
+                'postprocessors': [
+                    {'key': 'FFmpegMerger'},  # Merge video + audio first
+                    {'key': 'FFmpegSplitChapters'}  # Then split into chapters
+                ]
+            })
+
         if self.outputFormat.get() == "Audio only":
+            # Convert audio quality to bitrate (e.g., 192 -> '192k')
+            audio_bitrate = f"{self.audioQuality.get()}k"
             opts.update({
                 'format': 'bestaudio/best',
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
-                    'preferredquality': '192',
+                    'preferredquality': self.audioQuality.get(),
                 }],
                 'outtmpl': f"{self.directoryInput.get()}/%(title)s"
             })
@@ -225,19 +264,12 @@ class GUI:
             self.statusArea.configure(state='disabled')
 
     def SelectOutputDirectory(self):
-        # Create a hidden root window
-        root = tk.Tk()
-        root.withdraw()  # Hide the main window
-
         # Open the directory dialog
         fileOutputPath = filedialog.askdirectory(
             title="Select a Folder",
             initialdir="~"  # Start at user's home directory
         ) + '/'
 
-        # Destroy the root window after selection
-        root.destroy()
-        
         self.directoryInput.delete(0, ctk.END)
         self.directoryInput.insert(0, fileOutputPath)
 
