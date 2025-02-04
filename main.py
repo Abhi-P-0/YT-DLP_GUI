@@ -6,6 +6,7 @@ import yt_dlp
 import sv_ttk
 import customtkinter as ctk
 import threading
+import subprocess
 from PIL import Image
 
 class GUI:
@@ -54,9 +55,13 @@ class GUI:
         self.dirButton = ctk.CTkButton(self.root, text="Directory", command=self.SelectOutputDirectory)
         self.dirButton.grid(row=1, column=2, padx=5, pady=5)
 
+        # Status and Image area frame
+        # self.InfoArea = ctk.CTkScrollableFrame(self.root, label_text='', width=(int(self.width / 5)), height=(int(self.height / 2)))
+        # self.InfoArea.grid(row=2, column=0, padx=5, pady=5, stick='nsw', rowspan=2, columnspan=2)
+
         # Thumbnail Image section
         #img = tk.PhotoImage(file="./ytdlpGUI.png")
-        img = ctk.CTkImage(light_image=Image.open('./ytdlpGUI.png'), size=(int(self.height / 3), int(self.width / 3)))
+        img = ctk.CTkImage(light_image=Image.open('./ytdlpGUI.png'), size=(int(self.height / 2), int(self.width / 2)))
         imageLabel = ctk.CTkLabel(self.root, image=img, text="")
         imageLabel.grid(row=2, column=0, padx=5, pady=5, sticky='w', columnspan=2)
 
@@ -86,8 +91,12 @@ class GUI:
         self.audioQuality = ctk.CTkOptionMenu(self.optionsFrame, values=['32', '96', '128', '160', '192', '256'], dynamic_resizing=False)
         self.audioQuality.grid(row=2, column=1, padx=5, pady=5)
 
+        ctk.CTkLabel(self.optionsFrame, text="Audio Format: ").grid(row=3, column=0, pady=5, padx=5) # VIDEO QUALITY
+        self.audioFormat = ctk.CTkOptionMenu(self.optionsFrame, values=['mp3', 'opus'], dynamic_resizing=False)
+        self.audioFormat.grid(row=3, column=1, padx=5, pady=5)
+
         self.splitChapters = ctk.CTkCheckBox(self.optionsFrame, text="Split by Chapters")
-        self.splitChapters.grid(row=3, column=0, padx=5, pady=5)
+        self.splitChapters.grid(row=4, column=0, padx=5, pady=5)
         
         
     def UI2(self):
@@ -149,39 +158,58 @@ class GUI:
         threading.Thread(target=self.DLThread, args=(self.urlInput.get(), ), daemon=True).start()
 
     def DLThread(self, url):
-        try: # extract info from URL
-            with yt_dlp.YoutubeDL({'logger': self, 'noprogress' : True}) as ydls:
-                info_dict = ydls.extract_info(self.urlInput.get(), download=False)
+        try:
+            cmd = ['yt-dlp']
+            output_dir = self.directoryInput.get()
+            
+            # Create directory first (without filename template)
+            os.makedirs(output_dir, exist_ok=True)  # Fix 1: Create directory separately
 
-            # self.SendStatusMessage(info_dict)
+            cmd.extend(['-P', output_dir])
+            
+            # Build output template
+            if self.splitChapters.get():
+                cmd.append('--split-chapters')
+                # output_template = os.path.join(output_dir, '%(title)s [%(chapter)s].%(ext)s')
+                cmd.extend(['-o', '%(title)s [%(chapter)s].%(ext)s'])
+            else:
+                # output_template = os.path.join(output_dir, '%(title)s.%(ext)s')  # Fix 2: Template includes directory
+                cmd.extend(['-o', '%(title)s.%(ext)s'])
+            
+            # cmd.extend(['-o', output_template])
 
-        except Exception as e:
-            self.SendStatusMessage(f'Error: {str(e)}')
+            # Format selection
+            if self.outputFormat.get() == "Audio only":
+                cmd.extend(['-x', '--audio-format', f'{self.audioFormat.get()}', '--audio-quality', f'{self.audioQuality.get()}k'])
+            else:
+                cmd.extend(['-f', f'bestvideo[height<={self.vidQuality.get()}]+bestaudio'])
+            
+            cmd.append(url)
+            
+            self.SendStatusMessage(f"Executing command: {' '.join(cmd)}")
+            
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1,
+                text=True
+            )
+            
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
 
-        if len(info_dict) < 1: # make sure information is extracted about the video in question
-            self.SendStatusMessage('Something went wrong with fetching information about the video.')
+                if line:
+                    self.SendStatusMessage(line.strip())
+            
+            if process.returncode == 0:
+                self.SendStatusMessage("Download completed successfully")
 
-            return
-
-        # ydl_opts = { # setup the default options
-        #     'ignoreerrors': True,
-        #     'progress_hooks': [self.ProgressBar],
-        #     'logger': self,
-        #     'noprogress': True,  # Disable default progress output
-        #     # 'outtmpl': f"{self.directoryInput.get()}/%(title)s.%(ext)s",
-        #     'outtmpl' : self.directoryInput.get() + info_dict.get('title') + '.' + info_dict.get('ext')
-        # }
-
-
-        ydl_opts =  self.UpdateOptionsConfiguration(info_dict) # update the default options if needbe
-
-        # self.SendStatusMessage(f'Vid quality: {self.videQuality.get()} | Audio Quality: {self.audioQuality.get()}')
-
-        try: # download the video
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-
-            self.SendStatusMessage("Download completed successfully")
+            else:
+                self.SendStatusMessage(f"Error occurred (exit code {process.returncode})")
 
         except Exception as e:
             self.SendStatusMessage(f"Error: {str(e)}")
@@ -255,13 +283,13 @@ class GUI:
         self.root.after(0, self.UpdateStatusDisplay, msg)
 
     def UpdateStatusDisplay(self, message):
-            timestamp = time.strftime('%H:%M:%S')
-            self.statusArea.configure(state='normal')
+        timestamp = time.strftime('%H:%M:%S')
+        self.statusArea.configure(state='normal')
 
-            self.statusArea.insert('end', f'[{timestamp}] {message}\n')
+        self.statusArea.insert('end', f'[{timestamp}] {message}\n')
 
-            self.statusArea.see('end')  # Auto-scroll to bottom
-            self.statusArea.configure(state='disabled')
+        self.statusArea.see('end')  # Auto-scroll to bottom
+        self.statusArea.configure(state='disabled')
 
     def SelectOutputDirectory(self):
         # Open the directory dialog
@@ -269,8 +297,13 @@ class GUI:
             title="Select a Folder",
             initialdir="~"  # Start at user's home directory
         ) + '/'
-
-        self.directoryInput.delete(0, ctk.END)
-        self.directoryInput.insert(0, fileOutputPath)
+        # directory = filedialog.askdirectory(initialdir=os.path.expanduser("~"))
+        # if directory:
+        #     self.dir_input.delete(0, ctk.END)
+        #     self.dir_input.insert(0, directory + '/')
+        
+        if fileOutputPath:
+            self.directoryInput.delete(0, ctk.END)
+            self.directoryInput.insert(0, fileOutputPath)
 
 app = GUI()
