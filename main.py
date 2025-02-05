@@ -47,8 +47,8 @@ class GUI:
         self.urlEntry = ctk.CTkEntry(self.inputFrame, width=int(self.width))
         self.urlEntry.grid(row=0, column=1, padx=10, pady=10, sticky='ew')
 
-        self.fetchButton = ctk.CTkButton(self.inputFrame, text="Download", command=self.MainButton)
-        self.fetchButton.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
+        self.downloadButton = ctk.CTkButton(self.inputFrame, text="Download", command=self.MainButton)
+        self.downloadButton.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
 
         # Configure frame's internal column weights
         self.inputFrame.columnconfigure(1, weight=10)  # Makes entry expand
@@ -86,19 +86,24 @@ class GUI:
         self.outputFormat.set('Video')
 
         ctk.CTkLabel(self.configFrame, text="Video Quality: ").grid(row=1, column=0, pady=5, padx=5) # VIDEO QUALITY
-        self.vidQuality = ctk.CTkOptionMenu(self.configFrame, values=['144', '240', '480', '720', '1080', '1440', '2160'], dynamic_resizing=False)
+        self.vidQuality = ctk.CTkOptionMenu(self.configFrame, values=['144p', '240p', '480p', '720p', '1080p', '1440p', '2160p'], dynamic_resizing=False)
         self.vidQuality.grid(row=1, column=1, padx=5, pady=5)
 
         ctk.CTkLabel(self.configFrame, text="Audio Quality: ").grid(row=2, column=0, pady=5, padx=5) # AUDIO QUALITY
-        self.audioQuality = ctk.CTkOptionMenu(self.configFrame, values=['32', '96', '128', '160', '192', '256'], dynamic_resizing=False)
+        self.audioQuality = ctk.CTkOptionMenu(self.configFrame, values=['Best', '32k', '96k', '128k', '160k', '192k', '256k'], dynamic_resizing=False)
         self.audioQuality.grid(row=2, column=1, padx=5, pady=5)
 
         ctk.CTkLabel(self.configFrame, text="Audio Format: ").grid(row=3, column=0, pady=5, padx=5) # VIDEO QUALITY
         self.audioFormat = ctk.CTkOptionMenu(self.configFrame, values=['mp3', 'opus'], dynamic_resizing=False)
         self.audioFormat.grid(row=3, column=1, padx=5, pady=5)
 
-        self.splitChapters = ctk.CTkCheckBox(self.configFrame, text="Split by Chapters")
-        self.splitChapters.grid(row=4, column=0, padx=5, pady=5)
+        ctk.CTkLabel(self.configFrame, text='Split by Chapters').grid(row=4, column=0, padx=(15, 5), pady=5)
+        self.splitChapters = ctk.CTkCheckBox(self.configFrame, text='')
+        self.splitChapters.grid(row=4, column=1, padx=5, pady=5)
+
+        ctk.CTkLabel(self.configFrame, text='Playlist').grid(row=5, column=0, padx=(15, 5), pady=5)
+        self.playlistSelector = ctk.CTkCheckBox(self.configFrame, text='')
+        self.playlistSelector.grid(row=5, column=1, padx=5, pady=5)
         
         
     def UI2(self):
@@ -161,6 +166,8 @@ class GUI:
 
     def DLThread(self, url):
         try:
+            self.downloadButton.configure(state=ctk.DISABLED)
+
             cmd = ['yt-dlp']
             output_dir = self.directoryEntry.get()
             
@@ -176,12 +183,20 @@ class GUI:
                 
             else:
                 cmd.extend(['-o', '%(title)s.%(ext)s'])
+
+            if self.playlistSelector.get():
+                cmd.append('--yes-playlist')
             
             # Format selection
             if self.outputFormat.get() == "Audio only":
-                cmd.extend(['-x', '--audio-format', f'{self.audioFormat.get()}', '--audio-quality', f'{self.audioQuality.get()}k'])
+                if self.audioQuality.get() != 'Best':
+                    cmd.extend(['-x', '--audio-format', f'{self.audioFormat.get()}', '--audio-quality', self.audioQuality.get()])
+                
+                else:
+                    cmd.extend(['-x', '--audio-format', f'{self.audioFormat.get()}', '--audio-quality', '0'])
+
             else:
-                cmd.extend(['-f', f'bestvideo[height<={self.vidQuality.get()}]+bestaudio'])
+                cmd.extend(['-f', f'bestvideo[height<={self.vidQuality.get()[:-1]}]+bestaudio'])
             
             cmd.append(url)
             
@@ -210,6 +225,8 @@ class GUI:
 
             else:
                 self.SendStatusMessage(f"Error occurred (exit code {process.returncode})")
+
+            self.downloadButton.configure(state=ctk.NORMAL)
 
         except Exception as e:
             self.SendStatusMessage(f"Error: {str(e)}")
