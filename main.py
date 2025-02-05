@@ -1,10 +1,7 @@
-import tkinter as tk
-from tkinter import filedialog
 import time
-import os, sys
-import yt_dlp
-import sv_ttk
+import os
 import customtkinter as ctk
+from customtkinter import filedialog
 import threading
 import subprocess
 from PIL import Image
@@ -16,8 +13,7 @@ class GUI:
     def __init__(self):
         self.root = ctk.CTk()
         self.root.title('YT-DLP GUI')
-        #self.root.resizable(0, 0)
-        #sv_ttk.set_theme("dark")
+        
         ctk.set_appearance_mode("System")  # Modes: system, light, dark
         ctk.set_default_color_theme("blue")
         
@@ -31,71 +27,77 @@ class GUI:
 
 
     def SetupUI(self):
-        self.root.grid_columnconfigure(0, weight=0)
-        #self.root.grid_rowconfigure(1, weight=1)
-        #self.root.grid_rowconfigure(3, weight=2)
+        self.root.columnconfigure(0, weight=8)
+        self.root.columnconfigure(1, weight=2)
+        self.root.rowconfigure(1, weight=1)
+        
+        self.inputFrame = ctk.CTkFrame(self.root)
+        self.inputFrame.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
+        
+        self.infoFrame = ctk.CTkFrame(self.root)
+        self.infoFrame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        
+        self.configFrame = ctk.CTkFrame(self.root)
+        self.configFrame.grid(row=1, column=1, sticky='nsew', padx=5, pady=5)
+        
+        # INPUT AREA setup --------------------------------------------------------------------------------------------------------------------
 
-        # Setup URL Input
-        urlLabel = ctk.CTkLabel(self.root, text="URL")
-        urlLabel.grid(row=0, column=0, padx=5, pady=5)
-        self.urlInput = ctk.CTkEntry(self.root, width=int(self.height / 2))
-        self.urlInput.grid(row=0, column=1, padx=5, pady=5)
+        ctk.CTkLabel(self.inputFrame, text="URL:").grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        # Setup Download Button
-        self.dlButton = ctk.CTkButton(self.root, text="Download", command=self.MainButton)
-        self.dlButton.grid(row=0, column=2, padx=5, pady=5)
+        self.urlEntry = ctk.CTkEntry(self.inputFrame, width=int(self.width))
+        self.urlEntry.grid(row=0, column=1, padx=10, pady=10, sticky='ew')
 
-        # Setup File Output
-        directoryLabel = ctk.CTkLabel(self.root, text="Output Folder")
-        directoryLabel.grid(row=1, column=0, padx=5, pady=5)
-        self.directoryInput = ctk.CTkEntry(self.root, width=int(self.height / 2))
-        self.directoryInput.grid(row=1, column=1, padx=5, pady=5)
+        self.fetchButton = ctk.CTkButton(self.inputFrame, text="Download", command=self.MainButton)
+        self.fetchButton.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
 
-        # Setup Download Button
-        self.dirButton = ctk.CTkButton(self.root, text="Directory", command=self.SelectOutputDirectory)
-        self.dirButton.grid(row=1, column=2, padx=5, pady=5)
+        # Configure frame's internal column weights
+        self.inputFrame.columnconfigure(1, weight=10)  # Makes entry expand
+        self.inputFrame.columnconfigure(2, weight=1)
 
-        # Status and Image area frame
-        # self.InfoArea = ctk.CTkScrollableFrame(self.root, label_text='', width=(int(self.width / 5)), height=(int(self.height / 2)))
-        # self.InfoArea.grid(row=2, column=0, padx=5, pady=5, stick='nsw', rowspan=2, columnspan=2)
+        # ------------------------------------
 
-        # Thumbnail Image section
-        #img = tk.PhotoImage(file="./ytdlpGUI.png")
-        img = ctk.CTkImage(light_image=Image.open('./ytdlpGUI.png'), size=(int(self.height / 2), int(self.width / 2)))
-        imageLabel = ctk.CTkLabel(self.root, image=img, text="")
-        imageLabel.grid(row=2, column=0, padx=5, pady=5, sticky='w', columnspan=2)
+        ctk.CTkLabel(self.inputFrame, text="Directory:").grid(row=1, column=0, padx=10, pady=10, sticky="ew")
 
-        # Status area panel
-        #statusLabel = ctk.CTkLabel(self.root, text="Log:")
-        #statusLabel.grid(row=3, column=0, padx=5, pady=5)
-        self.statusArea = ctk.CTkTextbox(self.root, height=int(self.width / 5), width=int(self.height / 3))#scrolledtext.ScrolledText(self.root, height=10)#ctk.CTkScrollableFrame(self.root, height=8)
-        self.statusArea.grid(row=3, column=0, padx=5, pady=5, sticky='w', columnspan=2)
-        self.statusArea.configure(state='disabled')
+        self.directoryEntry = ctk.CTkEntry(self.inputFrame, width=int(self.width))
+        self.directoryEntry.grid(row=1, column=1, padx=10, pady=10, sticky='ew')
 
-        # Options for video panel, Frame setup
-        self.optionsFrame = ctk.CTkScrollableFrame(self.root, label_text="Options")
-        self.optionsFrame.grid(row=2, column=1, padx=5, pady=5, stick='nse', rowspan=2, columnspan=2)
+        self.directoryInput = ctk.CTkButton(self.inputFrame, text="Browse", command=self.SelectOutputDirectory)
+        self.directoryInput.grid(row=1, column=2, padx=10, pady=10, sticky="ew")
 
+        # ------------------------------------------------------------------------------------------------------------------------------
+
+        # INFO AREA setup --------------------------------------------------------------------------------------------------------------------
+
+        self.imageArea = ctk.CTkLabel(self.infoFrame, text="Thumbnail....", fg_color="gray20", corner_radius=8)
+        self.imageArea.pack(padx=10, pady=10, fill="both", expand=True)
+
+        self.statusArea = ctk.CTkTextbox(self.infoFrame, height=int(self.height / 12), corner_radius=8)
+        self.statusArea.pack(padx=10, pady=10, fill='both')
+        self.statusArea.insert("end", f"[{time.strftime('%H:%M:%S')}]: start ...\n\n")
+        self.statusArea.configure(state="disabled")
+
+        # ------------------------------------------------------------------------------------------------------------------------------
+        
         # Actual options setup here
-        ctk.CTkLabel(self.optionsFrame, text="Output Format: ").grid(row=0, column=0, pady=5, padx=5)
-        self.outputFormat = ctk.CTkSegmentedButton(self.optionsFrame)
+        ctk.CTkLabel(self.configFrame, text="Output Format: ").grid(row=0, column=0, pady=5, padx=5)
+        self.outputFormat = ctk.CTkSegmentedButton(self.configFrame)
         self.outputFormat.grid(row=0, column=1, pady=5)
         self.outputFormat.configure(values=["Video", "Audio only"])
         self.outputFormat.set('Video')
 
-        ctk.CTkLabel(self.optionsFrame, text="Video Quality: ").grid(row=1, column=0, pady=5, padx=5) # VIDEO QUALITY
-        self.vidQuality = ctk.CTkOptionMenu(self.optionsFrame, values=['144', '240', '480', '720', '1080', '1440', '2160'], dynamic_resizing=False)
+        ctk.CTkLabel(self.configFrame, text="Video Quality: ").grid(row=1, column=0, pady=5, padx=5) # VIDEO QUALITY
+        self.vidQuality = ctk.CTkOptionMenu(self.configFrame, values=['144', '240', '480', '720', '1080', '1440', '2160'], dynamic_resizing=False)
         self.vidQuality.grid(row=1, column=1, padx=5, pady=5)
 
-        ctk.CTkLabel(self.optionsFrame, text="Audio Quality: ").grid(row=2, column=0, pady=5, padx=5) # AUDIO QUALITY
-        self.audioQuality = ctk.CTkOptionMenu(self.optionsFrame, values=['32', '96', '128', '160', '192', '256'], dynamic_resizing=False)
+        ctk.CTkLabel(self.configFrame, text="Audio Quality: ").grid(row=2, column=0, pady=5, padx=5) # AUDIO QUALITY
+        self.audioQuality = ctk.CTkOptionMenu(self.configFrame, values=['32', '96', '128', '160', '192', '256'], dynamic_resizing=False)
         self.audioQuality.grid(row=2, column=1, padx=5, pady=5)
 
-        ctk.CTkLabel(self.optionsFrame, text="Audio Format: ").grid(row=3, column=0, pady=5, padx=5) # VIDEO QUALITY
-        self.audioFormat = ctk.CTkOptionMenu(self.optionsFrame, values=['mp3', 'opus'], dynamic_resizing=False)
+        ctk.CTkLabel(self.configFrame, text="Audio Format: ").grid(row=3, column=0, pady=5, padx=5) # VIDEO QUALITY
+        self.audioFormat = ctk.CTkOptionMenu(self.configFrame, values=['mp3', 'opus'], dynamic_resizing=False)
         self.audioFormat.grid(row=3, column=1, padx=5, pady=5)
 
-        self.splitChapters = ctk.CTkCheckBox(self.optionsFrame, text="Split by Chapters")
+        self.splitChapters = ctk.CTkCheckBox(self.configFrame, text="Split by Chapters")
         self.splitChapters.grid(row=4, column=0, padx=5, pady=5)
         
         
@@ -145,22 +147,22 @@ class GUI:
         self.optionsFrame.grid_columnconfigure(0, weight=1)
         
     def MainButton(self):
-        if self.directoryInput.get() == "":
+        if self.directoryEntry.get() == "":
             self.SendStatusMessage("No output directory.")
 
             return
 
-        if not self.urlInput.get():
+        if not self.urlEntry.get():
             self.SendStatusMessage("No link.")
 
             return
         
-        threading.Thread(target=self.DLThread, args=(self.urlInput.get(), ), daemon=True).start()
+        threading.Thread(target=self.DLThread, args=(self.urlEntry.get(), ), daemon=True).start()
 
     def DLThread(self, url):
         try:
             cmd = ['yt-dlp']
-            output_dir = self.directoryInput.get()
+            output_dir = self.directoryEntry.get()
             
             # Create directory first (without filename template)
             os.makedirs(output_dir, exist_ok=True)  # Fix 1: Create directory separately
@@ -170,14 +172,11 @@ class GUI:
             # Build output template
             if self.splitChapters.get():
                 cmd.append('--split-chapters')
-                # output_template = os.path.join(output_dir, '%(title)s [%(chapter)s].%(ext)s')
                 cmd.extend(['-o', '%(title)s [%(chapter)s].%(ext)s'])
+                
             else:
-                # output_template = os.path.join(output_dir, '%(title)s.%(ext)s')  # Fix 2: Template includes directory
                 cmd.extend(['-o', '%(title)s.%(ext)s'])
             
-            # cmd.extend(['-o', output_template])
-
             # Format selection
             if self.outputFormat.get() == "Audio only":
                 cmd.extend(['-x', '--audio-format', f'{self.audioFormat.get()}', '--audio-quality', f'{self.audioQuality.get()}k'])
@@ -197,8 +196,9 @@ class GUI:
                 text=True
             )
             
-            while True:
+            while True: # Output to status window in the UI
                 line = process.stdout.readline()
+
                 if not line and process.poll() is not None:
                     break
 
@@ -213,71 +213,6 @@ class GUI:
 
         except Exception as e:
             self.SendStatusMessage(f"Error: {str(e)}")
-
-    def UpdateOptionsConfiguration(self, info):
-        self.SendStatusMessage(f'\n{self.outputFormat.get()} mode. Video quality: {self.vidQuality.get()} Audio quality: {self.audioQuality.get()}\n')
-
-        opts = {
-            'format': f'bestvideo[height<={self.vidQuality.get()}]+bestaudio',
-            'ignoreerrors': True,
-            'progress_hooks': [self.ProgressBar],
-            'logger': self,
-            'noprogress': True,
-            'outtmpl': self.directoryInput.get() + info.get('title') + '.' + info.get('ext'),
-            # Removed 'postprocessors' to allow yt-dlp defaults (includes merger if needed)
-        }
-
-        if self.splitChapters.get():
-            self.SendStatusMessage('Splitting chapters into individual videos.')
-            # Ensure directory path ends with a separator
-            directory = self.directoryInput.get().rstrip('/\\') + '/'
-            opts.update({
-                'outtmpl': f"{directory}%(title)s [%(chapter)s].%(ext)s",
-                'postprocessors': [
-                    {'key': 'FFmpegMerger'},  # Merge video + audio first
-                    {'key': 'FFmpegSplitChapters'}  # Then split into chapters
-                ]
-            })
-
-        if self.outputFormat.get() == "Audio only":
-            # Convert audio quality to bitrate (e.g., 192 -> '192k')
-            audio_bitrate = f"{self.audioQuality.get()}k"
-            opts.update({
-                'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': self.audioQuality.get(),
-                }],
-                'outtmpl': f"{self.directoryInput.get()}/%(title)s"
-            })
-
-        return opts
-
-    def ProgressBar(self, d):
-        if d['status'] == 'downloading':
-            msg = (f"Downloading: {d.get('_percent_str', '')} "
-                   f"of {d.get('_total_bytes_str', '')} "
-                   f"at {d.get('_speed_str', '')}")
-            
-        elif d['status'] == 'finished':
-            msg = "Post-processing complete"
-
-        else:
-            return
-        
-        self.SendStatusMessage(msg)
-
-    def debug(self, msg):
-        # Filter out redundant messages
-        if "Deleting original file" not in msg:
-            self.SendStatusMessage(msg)
-
-    def warning(self, msg):
-        self.SendStatusMessage(f"Warning: {msg}")
-
-    def error(self, msg):
-        self.SendStatusMessage(f"ERROR: {msg}")
 
     def SendStatusMessage(self, msg):
         self.root.after(0, self.UpdateStatusDisplay, msg)
@@ -296,14 +231,11 @@ class GUI:
         fileOutputPath = filedialog.askdirectory(
             title="Select a Folder",
             initialdir="~"  # Start at user's home directory
-        ) + '/'
-        # directory = filedialog.askdirectory(initialdir=os.path.expanduser("~"))
-        # if directory:
-        #     self.dir_input.delete(0, ctk.END)
-        #     self.dir_input.insert(0, directory + '/')
+        )
         
         if fileOutputPath:
-            self.directoryInput.delete(0, ctk.END)
-            self.directoryInput.insert(0, fileOutputPath)
+            fileOutputPath += '/'
+            self.directoryEntry.delete(0, ctk.END)
+            self.directoryEntry.insert(0, fileOutputPath)
 
 app = GUI()
