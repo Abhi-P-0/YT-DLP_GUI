@@ -4,6 +4,7 @@ import customtkinter as ctk
 from customtkinter import filedialog
 import threading
 import subprocess
+import yt_dlp
 from PIL import Image
 
 class GUI:
@@ -165,6 +166,15 @@ class GUI:
         threading.Thread(target=self.DLThread, args=(self.urlEntry.get(), ), daemon=True).start()
 
     def DLThread(self, url):
+        try: # extract info from URL
+            with yt_dlp.YoutubeDL({'logger': None, 'noprogress' : True}) as ydls:
+                info_dict = ydls.extract_info(self.urlEntry.get(), download=False)
+
+                # print(info_dict.get('title'))
+            
+        except Exception as e:
+            self.SendStatusMessage(f'Error: {str(e)}')
+        
         try:
             self.downloadButton.configure(state=ctk.DISABLED)
 
@@ -174,14 +184,16 @@ class GUI:
             # Create directory first (without filename template)
             os.makedirs(output_dir, exist_ok=True)  # Fix 1: Create directory separately
 
-            cmd.extend(['-P', output_dir])
             
-            # Build output template
             if self.splitChapters.get():
-                cmd.append('--split-chapters')
-                cmd.extend(['-o', '%(title)s [%(chapter)s].%(ext)s'])
+                # Set BASE directory with -P (static path)
+                cmd.extend(['-P', output_dir + info_dict.get('title')])
                 
+                # Then use -o to create subfolder structure within it
+                cmd.extend(['-o', '%(chapter)s.%(ext)s'])  # Folder will use actual title
+                cmd.append('--split-chapters')
             else:
+                cmd.extend(['-P', output_dir])
                 cmd.extend(['-o', '%(title)s.%(ext)s'])
 
             if self.playlistSelector.get():
