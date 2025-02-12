@@ -1,15 +1,17 @@
 import time
 import os
-import customtkinter as ctk
-from customtkinter import filedialog
 import threading
 import subprocess
+import requests
+import re
+import customtkinter as ctk
+from customtkinter import filedialog
 import yt_dlp
 from PIL import Image
 
 class GUI:
 
-    
+    version = 0.4
     
     def __init__(self):
         self.root = ctk.CTk()
@@ -24,6 +26,8 @@ class GUI:
         
         self.SetupUI()
 
+        self.CheckForUpdate()
+
         self.root.mainloop()
 
 
@@ -31,6 +35,7 @@ class GUI:
         self.root.columnconfigure(0, weight=8)
         self.root.columnconfigure(1, weight=2)
         self.root.rowconfigure(1, weight=1)
+        self.root.rowconfigure(2, weight=0)
         
         self.inputFrame = ctk.CTkFrame(self.root)
         self.inputFrame.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
@@ -40,6 +45,10 @@ class GUI:
         
         self.configFrame = ctk.CTkFrame(self.root)
         self.configFrame.grid(row=1, column=1, sticky='nsew', padx=5, pady=5)
+
+        self.bottomFrame = ctk.CTkFrame(self.root)
+        self.bottomFrame.grid(row=2, column=0, columnspan=2, sticky='ew', padx=5, pady=(0, 5))
+        self.bottomFrame.rowconfigure(0, weight=1)
         
         # INPUT AREA setup --------------------------------------------------------------------------------------------------------------------
 
@@ -48,7 +57,7 @@ class GUI:
         self.urlEntry = ctk.CTkEntry(self.inputFrame, width=int(self.width))
         self.urlEntry.grid(row=0, column=1, padx=10, pady=10, sticky='ew')
 
-        self.downloadButton = ctk.CTkButton(self.inputFrame, text="Download", command=self.MainButton)
+        self.downloadButton = ctk.CTkButton(self.inputFrame, text="Download", command=self.MainButton, fg_color='green')
         self.downloadButton.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
 
         # Configure frame's internal column weights
@@ -105,53 +114,24 @@ class GUI:
         ctk.CTkLabel(self.configFrame, text='Playlist').grid(row=5, column=0, padx=(15, 5), pady=5)
         self.playlistSelector = ctk.CTkCheckBox(self.configFrame, text='')
         self.playlistSelector.grid(row=5, column=1, padx=5, pady=5)
+
+        # --------------------------------------------------------------------------------------------------------------------------------
+
+        self.progressBar = ctk.CTkProgressBar(self.bottomFrame, height=(self.height * 0.009), width=self.width, progress_color='green')
+        self.progressBar.grid(row=0, column=0, sticky='ew', padx=5)
+        self.progressBar.set(0)
+
+        self.speedLimit = ctk.CTkEntry(self.bottomFrame, height=9, width=100)
+        self.speedLimit.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
+
+        self.incSpeedLimit = ctk.CTkButton(self.bottomFrame, width=30, text='+')
+        self.incSpeedLimit.grid(row=0, column=2, padx=3)
+
+        self.decSpeedLimit = ctk.CTkButton(self.bottomFrame, width=30, text='-')
+        self.decSpeedLimit.grid(row=0, column=3, padx=3)
         
-        
-    def UI2(self):
-        # Configure grid layout (3x3)
-        self.root.grid_columnconfigure(0, weight=3)
-        self.root.grid_columnconfigure(1, weight=0)
-        self.root.grid_columnconfigure(2, weight=1)
-        self.root.grid_rowconfigure(1, weight=1)
-        self.root.grid_rowconfigure(2, weight=0)
-        
-        # URL Entry and Button (row 0)
-        #self.url_label = ctk.CTkLabel(self.root, text="URL:")
-        #self.url_label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
-        
-        self.urlInput = ctk.CTkEntry(self.root)
-        self.urlInput.grid(row=0, column=0, padx=(0, 10), pady=10, sticky="nsew", columnspan=2)
-        
-        self.dlButton = ctk.CTkButton(self.root, text="Fetch", command=self.MainButton)
-        self.dlButton.grid(row=0, column=3, padx=10, pady=10, sticky="e")
-        
-        # Image Area (row 1)
-        self.imageFrame = ctk.CTkFrame(self.root, corner_radius=0)
-        self.imageFrame.grid(row=1, column=0, rowspan=2, padx=10, pady=10, sticky="nsew")
-        
-        self.imageLabel = ctk.CTkLabel(self.imageFrame, text="Image Area", fg_color="gray20", corner_radius=8)
-        self.imageLabel.pack(padx=10, pady=10, fill="both", expand=True)
-        
-        # Scroll Area (right side)
-        self.optionsFrame = ctk.CTkScrollableFrame(self.root, label_text="Scroll Area")
-        self.optionsFrame.grid(row=1, column=2, rowspan=2, padx=(0, 10), pady=10, sticky="nsew", columnspan=2)
-        
-        # Add some example widgets to scroll area
-        for i in range(10):
-            label = ctk.CTkLabel(self.optionsFrame, text=f"Item {i+1}")
-            label.pack(pady=2)
-        
-        # Log Text Area (bottom left)
-        self.statusArea = ctk.CTkTextbox(self.root, height=100, corner_radius=8)
-        self.statusArea.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
-        self.statusArea.insert("0.0", "Log messages will appear here...\n\n")
-        self.statusArea.configure(state="disabled")
-        
-        # Configure weights for resizing
-        self.imageFrame.grid_columnconfigure(0, weight=1)
-        self.imageFrame.grid_rowconfigure(0, weight=1)
-        self.optionsFrame.grid_columnconfigure(0, weight=1)
-        
+               
+    
     def MainButton(self):
         if self.directoryEntry.get() == "":
             self.SendStatusMessage("No output directory.")
@@ -230,7 +210,20 @@ class GUI:
                     break
 
                 if line:
-                    self.SendStatusMessage(line.strip())
+                    if '[download]' in line and 'Destination' not in line:
+                        # Use regex to find percentage (e.g: "42.5%")
+                        match = re.search(r'(\d{1,3}(\.\d+)?)%', line)
+                        
+                        if match:
+                            try:
+                                progress = float(match.group(1)) / 100
+                                self.progressBar.set(progress)
+
+                            except (ValueError, AttributeError) as err:
+                                self.SendStatusMessage(f'Error occured with progress bar: {err}')
+                    
+                    else:
+                        self.SendStatusMessage(line.strip())
             
             if process.returncode == 0:
                 self.SendStatusMessage("Download completed successfully")
@@ -266,5 +259,12 @@ class GUI:
             fileOutputPath += '/'
             self.directoryEntry.delete(0, ctk.END)
             self.directoryEntry.insert(0, fileOutputPath)
+
+    def CheckForUpdate(self):
+        response = requests.get('https://github.com/Abhi-P-0/YT-DLP_GUI/releases/latest')
+        checkedVer = float(response.url.split('/').pop()[1:]) # Version on github (latest)
+        
+        if checkedVer > self.version:
+            self.SendStatusMessage('\n-------------------------------------------\n|\t\t\t|\n|     New version available.\t\t\t|\n|\t\t\t|\n-------------------------------------------')
 
 app = GUI()
