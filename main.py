@@ -11,7 +11,8 @@ from PIL import Image
 
 class GUI:
 
-    version = 0.4
+    version = 0.5
+    stopp = False
     
     def __init__(self):
         self.root = ctk.CTk()
@@ -49,6 +50,8 @@ class GUI:
         self.bottomFrame = ctk.CTkFrame(self.root)
         self.bottomFrame.grid(row=2, column=0, columnspan=2, sticky='ew', padx=5, pady=(0, 5))
         self.bottomFrame.rowconfigure(0, weight=1)
+        self.bottomFrame.columnconfigure(0, weight=2)
+        self.bottomFrame.columnconfigure(1, weight=1)
         
         # INPUT AREA setup --------------------------------------------------------------------------------------------------------------------
 
@@ -83,7 +86,7 @@ class GUI:
 
         self.statusArea = ctk.CTkTextbox(self.infoFrame, height=int(self.height / 12), corner_radius=8)
         self.statusArea.pack(padx=10, pady=10, fill='both')
-        self.statusArea.insert("end", f"[{time.strftime('%H:%M:%S')}]: start ...\n\n")
+        self.statusArea.insert("end", f"[{time.strftime('%H:%M:%S')}]: version: {self.version} | start ...\n\n")
         self.statusArea.configure(state="disabled")
 
         # ------------------------------------------------------------------------------------------------------------------------------
@@ -107,13 +110,19 @@ class GUI:
         self.audioFormat = ctk.CTkOptionMenu(self.configFrame, values=['mp3', 'opus'], dynamic_resizing=False)
         self.audioFormat.grid(row=3, column=1, padx=5, pady=5)
 
-        ctk.CTkLabel(self.configFrame, text='Split by Chapters').grid(row=4, column=0, padx=(15, 5), pady=5)
+        ctk.CTkLabel(self.configFrame, text='Split by Chapters if found').grid(row=4, column=0, padx=(15, 5), pady=5)
         self.splitChapters = ctk.CTkCheckBox(self.configFrame, text='')
         self.splitChapters.grid(row=4, column=1, padx=5, pady=5)
 
         ctk.CTkLabel(self.configFrame, text='Playlist').grid(row=5, column=0, padx=(15, 5), pady=5)
         self.playlistSelector = ctk.CTkCheckBox(self.configFrame, text='')
         self.playlistSelector.grid(row=5, column=1, padx=5, pady=5)
+        
+
+
+        self.stoppButton = ctk.CTkButton(self.configFrame, text='Interupt Download', command=self.InteruptDownload, fg_color='red')
+        self.stoppButton.grid(row=20, column=0, padx=5, pady=5, sticky='nsew')
+        self.stoppButton.configure(state=ctk.DISABLED)
 
         # --------------------------------------------------------------------------------------------------------------------------------
 
@@ -124,13 +133,15 @@ class GUI:
         self.speedLimit = ctk.CTkEntry(self.bottomFrame, height=9, width=100)
         self.speedLimit.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
 
-        self.incSpeedLimit = ctk.CTkButton(self.bottomFrame, width=30, text='+')
-        self.incSpeedLimit.grid(row=0, column=2, padx=3)
+        # self.incSpeedLimit = ctk.CTkButton(self.bottomFrame, width=30, text='+')
+        # self.incSpeedLimit.grid(row=0, column=2, padx=3)
 
-        self.decSpeedLimit = ctk.CTkButton(self.bottomFrame, width=30, text='-')
-        self.decSpeedLimit.grid(row=0, column=3, padx=3)
+        # self.decSpeedLimit = ctk.CTkButton(self.bottomFrame, width=30, text='-')
+        # self.decSpeedLimit.grid(row=0, column=3, padx=3)
+
+        ctk.CTkLabel(self.bottomFrame, text='B/s').grid(row=0, column=2, padx=5)
         
-               
+        
     
     def MainButton(self):
         if self.directoryEntry.get() == "":
@@ -146,17 +157,21 @@ class GUI:
         threading.Thread(target=self.DLThread, args=(self.urlEntry.get(), ), daemon=True).start()
 
     def DLThread(self, url):
+        self.stoppButton.configure(state=ctk.ACTIVE)
+
         try: # extract info from URL
             with yt_dlp.YoutubeDL({'logger': None, 'noprogress' : True}) as ydls:
+                self.SendStatusMessage(f'Extraction info from URL.')
                 info_dict = ydls.extract_info(self.urlEntry.get(), download=False)
-
+                numChaps = info_dict.get('chapters')
+                self.SendStatusMessage(f'Successfully extracted info.')
                 # print(info_dict.get('title'))
             
         except Exception as e:
             self.SendStatusMessage(f'Error: {str(e)}')
         
         try:
-            self.downloadButton.configure(state=ctk.DISABLED)
+            self.downloadButton.configure(state=ctk.NORMAL) # Allow stopping DL
 
             cmd = ['yt-dlp']
             output_dir = self.directoryEntry.get()
@@ -165,7 +180,7 @@ class GUI:
             os.makedirs(output_dir, exist_ok=True)  # Fix 1: Create directory separately
 
             
-            if self.splitChapters.get():
+            if self.splitChapters.get() and numChaps != None:
                 # Set BASE directory with -P (static path)
                 cmd.extend(['-P', output_dir + info_dict.get('title')])
                 
@@ -178,6 +193,13 @@ class GUI:
 
             if self.playlistSelector.get():
                 cmd.append('--yes-playlist')
+
+            # Limit download rate
+            limit = self.GetSpeedLimit()
+
+            if limit:
+                self.SendStatusMessage(f'Limiting download speed to: {limit}B/s')
+                cmd.extend(['-r', str(limit)]) # apparently YT-DLP takes String for speed limit, fix later
             
             # Format selection
             if self.outputFormat.get() == "Audio only":
@@ -204,37 +226,68 @@ class GUI:
             )
             
             while True: # Output to status window in the UI
+                if self.stopp: # if stop button is pressed
+                    break
+
                 line = process.stdout.readline()
 
                 if not line and process.poll() is not None:
                     break
 
                 if line:
-                    if '[download]' in line and 'Destination' not in line:
+                    # Check if it's a download-related line
+                    if '[download]' in line:
                         # Use regex to find percentage (e.g: "42.5%")
                         match = re.search(r'(\d{1,3}(\.\d+)?)%', line)
                         
                         if match:
                             try:
                                 progress = float(match.group(1)) / 100
-                                self.progressBar.set(progress)
 
+                                self.progressBar.set(progress)
+                                # Optional: Send progress to status
+                                # self.SendStatusMessage(f"Download progress: {progress * 100:.1f}%")
+                                
                             except (ValueError, AttributeError) as err:
-                                self.SendStatusMessage(f'Error occured with progress bar: {err}')
-                    
+                                self.SendStatusMessage(f'Error occurred with progress bar: {err}')
+                        else:
+                            # Send non-percentage download messages
+                            self.SendStatusMessage(line.strip())
                     else:
+                        # Send all non-download messages
                         self.SendStatusMessage(line.strip())
             
             if process.returncode == 0:
                 self.SendStatusMessage("Download completed successfully")
 
+            elif self.stopp:
+                self.SendStatusMessage(f'Download interupted')
+
             else:
                 self.SendStatusMessage(f"Error occurred (exit code {process.returncode})")
 
             self.downloadButton.configure(state=ctk.NORMAL)
+            self.stoppButton.configure(state=ctk.DISABLED)
+            self.stopp = False
 
         except Exception as e:
             self.SendStatusMessage(f"Error: {str(e)}")
+
+    def GetSpeedLimit(self):
+        temp = self.speedLimit.get().strip()
+
+        try:
+            temp = float(temp)
+
+            return temp
+
+        except Exception as err:
+            self.SendStatusMessage(f'Invalid input for download speed limit. Use Integer/float values. {err}')
+
+            return None
+
+    def InteruptDownload(self):
+        self.stopp = True
 
     def SendStatusMessage(self, msg):
         self.root.after(0, self.UpdateStatusDisplay, msg)
