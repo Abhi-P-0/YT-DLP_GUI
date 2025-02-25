@@ -133,6 +133,15 @@ class GUI:
         self.speedLimit = ctk.CTkEntry(self.bottomFrame, height=9, width=100)
         self.speedLimit.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
 
+        self.totalProgressBar = ctk.CTkProgressBar(self.bottomFrame, height=(self.height * 0.009), width=self.width)
+        self.totalProgressBar.grid(row=1, column=0, sticky='ew', padx=5, columnspan=2)
+        self.totalProgressBar.set(0)
+        # self.totalProgressBar.configure(text='1 or 2 total')
+        self.totalProgressCount = ctk.StringVar()
+        self.totalProgressCount.set('')
+        self.totalProgressCounter = ctk.CTkLabel(self.bottomFrame, textvariable=self.totalProgressCount, bg_color="transparent",  text_color='white')
+        self.totalProgressCounter.grid(row=1, column=0)
+        
         # self.incSpeedLimit = ctk.CTkButton(self.bottomFrame, width=30, text='+')
         # self.incSpeedLimit.grid(row=0, column=2, padx=3)
 
@@ -163,10 +172,13 @@ class GUI:
             with yt_dlp.YoutubeDL({'logger': None, 'noprogress' : True}) as ydls:
                 self.SendStatusMessage(f'Extraction info from URL.')
                 info_dict = ydls.extract_info(self.urlEntry.get(), download=False)
+
                 numChaps = info_dict.get('chapters')
+
+                self.SetTotalProgress(info_dict)
+
                 self.SendStatusMessage(f'Successfully extracted info.')
-                # print(info_dict.get('title'))
-            
+                
         except Exception as e:
             self.SendStatusMessage(f'Error: {str(e)}')
         
@@ -179,20 +191,26 @@ class GUI:
             # Create directory first (without filename template)
             os.makedirs(output_dir, exist_ok=True)  # Fix 1: Create directory separately
 
+            if self.playlistSelector.get() or 'playlist' in self.urlEntry.get():
+                output_dir += info_dict.get('title') + '/'
+                self.SendStatusMessage('Playlist url detected.')
+                cmd.append('--yes-playlist')
             
             if self.splitChapters.get() and numChaps != None:
+            # if self.splitChapters.get():
                 # Set BASE directory with -P (static path)
-                cmd.extend(['-P', output_dir + info_dict.get('title')])
+                # cmd.extend(['-P', output_dir + info_dict.get('title') + '/'])
+                if 'title' not in output_dir:
+                    output_dir += info_dict.get('title') + '/'
+                # cmd.extend(['-P', output_dir + '%(title)s/'])
                 
                 # Then use -o to create subfolder structure within it
-                cmd.extend(['-o', '%(chapter)s.%(ext)s'])  # Folder will use actual title
+                cmd.extend(['-o', 'full-vid/%(chapter)s.%(ext)s'])  # Folder will use actual title
                 cmd.append('--split-chapters')
             else:
-                cmd.extend(['-P', output_dir])
                 cmd.extend(['-o', '%(title)s.%(ext)s'])
 
-            if self.playlistSelector.get():
-                cmd.append('--yes-playlist')
+            cmd.extend(['-P', output_dir])
 
             # Limit download rate
             limit = self.GetSpeedLimit()
@@ -272,6 +290,16 @@ class GUI:
 
         except Exception as e:
             self.SendStatusMessage(f"Error: {str(e)}")
+
+    def SetTotalProgress(self, info):
+        playlistTotal = info.get('playlist_count')
+
+        if playlistTotal is not None:
+            self.totalProgressCount.set(f'{1} of {playlistTotal} total')
+
+        else:
+            self.totalProgressCount.set('1 of 1 total')
+            
 
     def GetSpeedLimit(self):
         temp = self.speedLimit.get().strip()
