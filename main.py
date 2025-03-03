@@ -162,8 +162,37 @@ class GUI:
             self.SendStatusMessage("No link.")
 
             return
+
+        threading.Thread(target=self.DLManager, args=()).start()        
+
+    def DLManager(self):
+        info = self.GetInfo(self.urlEntry.get())
+
+        if info is None:
+            self.SendStatusMessage(f'Something went wrong with the URL.')
+
+            return
         
-        threading.Thread(target=self.DLThread, args=(self.urlEntry.get(), ), daemon=True).start()
+        if info.get('entries') is not None: # Playlist
+            activeThreads = []
+            urls = info.get('entries')
+
+            for url in urls:
+                while len(activeThreads) >= 2: # max 2 threads are running at a time
+                    for threadd in list(activeThreads):
+                        if not threadd.is_alive():
+                            activeThreads.remove(threadd)
+
+                    time.sleep(0.1)
+
+                thread = threading.Thread(target=self.DLThread, args=(url.get('webpage_url'), ))
+                thread.start()
+                
+                activeThreads.append(thread)
+
+
+        else: # Single URL        
+            threading.Thread(target=self.DLThread, args=(self.urlEntry.get(), ), daemon=True).start()
 
     def DLThread(self, url):
         self.stoppButton.configure(state=ctk.ACTIVE)
@@ -171,11 +200,11 @@ class GUI:
         try: # extract info from URL
             with yt_dlp.YoutubeDL({'logger': None, 'noprogress' : True}) as ydls:
                 self.SendStatusMessage(f'Extraction info from URL.')
-                info_dict = ydls.extract_info(self.urlEntry.get(), download=False)
+                info_dict = ydls.extract_info(url, download=False)
 
                 numChaps = info_dict.get('chapters')
 
-                self.SetTotalProgress(info_dict)
+                # self.SetTotalProgress(info_dict)
 
                 self.SendStatusMessage(f'Successfully extracted info.')
                 
@@ -191,10 +220,14 @@ class GUI:
             # Create directory first (without filename template)
             os.makedirs(output_dir, exist_ok=True)  # Fix 1: Create directory separately
 
-            if self.playlistSelector.get() or 'playlist' in self.urlEntry.get():
-                output_dir += info_dict.get('title') + '/'
-                self.SendStatusMessage('Playlist url detected.')
-                cmd.append('--yes-playlist')
+            # if self.playlistSelector.get() or 'playlist' in self.urlEntry.get():
+            #     self.SendStatusMessage('Playlist url detected.')
+                
+            #     allEntries = info_dict.get('entries')
+
+            # output_dir += info_dict.get('title') + '/'
+                
+            #     cmd.append('--yes-playlist')
             
             if self.splitChapters.get() and numChaps != None:
             # if self.splitChapters.get():
@@ -205,7 +238,7 @@ class GUI:
                 # cmd.extend(['-P', output_dir + '%(title)s/'])
                 
                 # Then use -o to create subfolder structure within it
-                cmd.extend(['-o', 'full-vid/%(chapter)s.%(ext)s'])  # Folder will use actual title
+                cmd.extend(['-o', 'full-vid/%(title)s.%(ext)s'])  # Folder will use actual title
                 cmd.append('--split-chapters')
             else:
                 cmd.extend(['-o', '%(title)s.%(ext)s'])
@@ -268,10 +301,10 @@ class GUI:
                                 
                             except (ValueError, AttributeError) as err:
                                 self.SendStatusMessage(f'Error occurred with progress bar: {err}')
-                        else:
-                            # Send non-percentage download messages
-                            self.SendStatusMessage(line.strip())
-                    else:
+                        # else:
+                        #     # Send non-percentage download messages
+                        #     self.SendStatusMessage(line.strip())
+                    elif '[youtube]' not in line:
                         # Send all non-download messages
                         self.SendStatusMessage(line.strip())
             
@@ -291,6 +324,25 @@ class GUI:
         except Exception as e:
             self.SendStatusMessage(f"Error: {str(e)}")
 
+    def UpdateTotalProgress(self):
+        pass
+
+    def GetInfo(self, url):
+        try: # extract info from URL
+            with yt_dlp.YoutubeDL({'logger': None, 'noprogress' : True}) as ydls:
+                self.SendStatusMessage(f'Extraction info from URL.')
+
+                info_dict = ydls.extract_info(self.urlEntry.get(), download=False)
+
+                # self.SetTotalProgress(info_dict)
+
+                self.SendStatusMessage(f'Successfully extracted info.')
+                
+        except Exception as e:
+            self.SendStatusMessage(f'Error: {str(e)}')
+
+        return info_dict
+
     def SetTotalProgress(self, info):
         playlistTotal = info.get('playlist_count')
 
@@ -304,7 +356,7 @@ class GUI:
     def GetSpeedLimit(self):
         temp = self.speedLimit.get().strip()
 
-        try:
+        try: # Validate speed limit as actual number
             temp = float(temp)
 
             return temp
@@ -346,6 +398,6 @@ class GUI:
         checkedVer = float(response.url.split('/').pop()[1:]) # Version on github (latest)
         
         if checkedVer > self.version:
-            self.SendStatusMessage('\n-------------------------------------------\n|\t\t\t|\n|     New version available.\t\t\t|\n|\t\t\t|\n-------------------------------------------')
+            self.SendStatusMessage('\n-------------------------------------------------------------------------------------\n|\t\t\t\t\t\t|\n|\t\tNew version available.\t\t\t\t|\n|\t\t\t\t\t\t|\n|    https://github.com/Abhi-P-0/YT-DLP_GUI/releases           |\n|\t\t\t\t\t\t|\n-------------------------------------------------------------------------------------')
 
 app = GUI()
