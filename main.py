@@ -8,10 +8,11 @@ import customtkinter as ctk
 from customtkinter import filedialog
 import yt_dlp
 from PIL import Image
+import pathlib
 
 class GUI:
 
-    version = 0.55
+    version = 0.6
     stopp = False
     
     def __init__(self):
@@ -114,9 +115,9 @@ class GUI:
         self.splitChapters = ctk.CTkCheckBox(self.configFrame, text='')
         self.splitChapters.grid(row=4, column=1, padx=5, pady=5)
 
-        ctk.CTkLabel(self.configFrame, text='Playlist').grid(row=5, column=0, padx=(15, 5), pady=5)
-        self.playlistSelector = ctk.CTkCheckBox(self.configFrame, text='')
-        self.playlistSelector.grid(row=5, column=1, padx=5, pady=5)
+        # ctk.CTkLabel(self.configFrame, text='Playlist').grid(row=5, column=0, padx=(15, 5), pady=5)
+        # self.playlistSelector = ctk.CTkCheckBox(self.configFrame, text='')
+        # self.playlistSelector.grid(row=5, column=1, padx=5, pady=5)
         
 
 
@@ -176,35 +177,46 @@ class GUI:
         if info.get('entries') is not None: # Playlist
             activeThreads = []
             urls = info.get('entries')
+            
+            self.totalProgressCount.set(f'{0} of {info.get('playlist_count')} total')
 
             for url in urls:
                 while len(activeThreads) >= 2: # max 2 threads are running at a time
                     for threadd in list(activeThreads):
                         if not threadd.is_alive():
                             activeThreads.remove(threadd)
+                    
+                    if self.stopp:
+                        break
 
-                    time.sleep(0.1)
+                    time.sleep(0.2)
+
+                if self.stopp:
+                    break
 
                 thread = threading.Thread(target=self.DLThread, args=(url.get('webpage_url'), ))
                 thread.start()
                 
                 activeThreads.append(thread)
 
+                self.UpdateTotalProgress()
 
         else: # Single URL        
             threading.Thread(target=self.DLThread, args=(self.urlEntry.get(), ), daemon=True).start()
+
+        self.downloadButton.configure(state=ctk.NORMAL)
+        self.stoppButton.configure(state=ctk.DISABLED)
+        self.stopp = False
 
     def DLThread(self, url):
         self.stoppButton.configure(state=ctk.ACTIVE)
 
         try: # extract info from URL
             with yt_dlp.YoutubeDL({'logger': None, 'noprogress' : True}) as ydls:
-                self.SendStatusMessage(f'Extraction info from URL.')
+                self.SendStatusMessage(f'Extracting info from URL.')
                 info_dict = ydls.extract_info(url, download=False)
 
                 numChaps = info_dict.get('chapters')
-
-                # self.SetTotalProgress(info_dict)
 
                 self.SendStatusMessage(f'Successfully extracted info.')
                 
@@ -220,22 +232,10 @@ class GUI:
             # Create directory first (without filename template)
             os.makedirs(output_dir, exist_ok=True)  # Fix 1: Create directory separately
 
-            # if self.playlistSelector.get() or 'playlist' in self.urlEntry.get():
-            #     self.SendStatusMessage('Playlist url detected.')
-                
-            #     allEntries = info_dict.get('entries')
-
-            # output_dir += info_dict.get('title') + '/'
-                
-            #     cmd.append('--yes-playlist')
-            
             if self.splitChapters.get() and numChaps != None:
-            # if self.splitChapters.get():
                 # Set BASE directory with -P (static path)
-                # cmd.extend(['-P', output_dir + info_dict.get('title') + '/'])
                 if 'title' not in output_dir:
                     output_dir += info_dict.get('title') + '/'
-                # cmd.extend(['-P', output_dir + '%(title)s/'])
                 
                 # Then use -o to create subfolder structure within it
                 cmd.extend(['-o', 'full-vid/%(title)s.%(ext)s'])  # Folder will use actual title
@@ -251,6 +251,8 @@ class GUI:
             if limit:
                 self.SendStatusMessage(f'Limiting download speed to: {limit}B/s')
                 cmd.extend(['-r', str(limit)]) # apparently YT-DLP takes String for speed limit, fix later
+
+            cmd.append('--windows-filenames')
             
             # Format selection
             if self.outputFormat.get() == "Audio only":
@@ -297,13 +299,10 @@ class GUI:
 
                                 self.progressBar.set(progress)
                                 # Optional: Send progress to status
-                                # self.SendStatusMessage(f"Download progress: {progress * 100:.1f}%")
                                 
                             except (ValueError, AttributeError) as err:
                                 self.SendStatusMessage(f'Error occurred with progress bar: {err}')
-                        # else:
-                        #     # Send non-percentage download messages
-                        #     self.SendStatusMessage(line.strip())
+                        
                     elif '[youtube]' not in line:
                         # Send all non-download messages
                         self.SendStatusMessage(line.strip())
@@ -311,21 +310,28 @@ class GUI:
             if process.returncode == 0:
                 self.SendStatusMessage("Download completed successfully")
 
+                # Modify all chapter files to use chapter names
+                # if self.splitChapters.get() and numChaps != None:
+                #     temp = self.directoryEntry.get() + "/" + info_dict.get('title')
+
+                #     for dir, subdirs, files in os.walk(self.directoryEntry.get()):
+                #         print(dir, subdirs, files)
+
+                #     print(temp)
+
             elif self.stopp:
                 self.SendStatusMessage(f'Download interupted')
 
             else:
                 self.SendStatusMessage(f"Error occurred (exit code {process.returncode})")
 
-            self.downloadButton.configure(state=ctk.NORMAL)
-            self.stoppButton.configure(state=ctk.DISABLED)
-            self.stopp = False
+            # self.downloadButton.configure(state=ctk.NORMAL)
+            # self.stoppButton.configure(state=ctk.DISABLED)
+            # self.stopp = False
 
         except Exception as e:
             self.SendStatusMessage(f"Error: {str(e)}")
 
-    def UpdateTotalProgress(self):
-        pass
 
     def GetInfo(self, url):
         try: # extract info from URL
@@ -334,8 +340,6 @@ class GUI:
 
                 info_dict = ydls.extract_info(self.urlEntry.get(), download=False)
 
-                # self.SetTotalProgress(info_dict)
-
                 self.SendStatusMessage(f'Successfully extracted info.')
                 
         except Exception as e:
@@ -343,27 +347,45 @@ class GUI:
 
         return info_dict
 
+    def UpdateTotalProgress(self):
+        temp = self.totalProgressCount.get().split()
+
+        curr, total = int(temp[0]) + 1, int(temp[2])
+
+        temp[0] = str(curr)
+
+        t = (curr / total)
+
+        self.totalProgressBar.set(t)
+
+        t = " ".join(temp)
+
+        self.totalProgressCount.set(t)
+
     def SetTotalProgress(self, info):
         playlistTotal = info.get('playlist_count')
 
         if playlistTotal is not None:
-            self.totalProgressCount.set(f'{1} of {playlistTotal} total')
+            self.totalProgressCount.set(f'{0} of {playlistTotal} total')
 
         else:
             self.totalProgressCount.set('1 of 1 total')
             
-
     def GetSpeedLimit(self):
         temp = self.speedLimit.get().strip()
 
-        try: # Validate speed limit as actual number
-            temp = float(temp)
+        if temp:
+            try: # Validate speed limit as actual number
+                temp = float(temp)
 
-            return temp
+                return temp
 
-        except Exception as err:
-            self.SendStatusMessage(f'Invalid input for download speed limit. Use Integer/float values. {err}')
+            except Exception as err:
+                self.SendStatusMessage(f'Invalid input for download speed limit. Use Integer/float values. {err}')
 
+                return None
+        
+        else:
             return None
 
     def InteruptDownload(self):
@@ -385,7 +407,7 @@ class GUI:
         # Open the directory dialog
         fileOutputPath = filedialog.askdirectory(
             title="Select a Folder",
-            initialdir="~"  # Start at user's home directory
+            initialdir="~" if self.directoryEntry.get() is None else self.directoryEntry.get()  # Start at user's home directory
         )
         
         if fileOutputPath:
