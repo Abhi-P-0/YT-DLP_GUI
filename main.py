@@ -4,15 +4,16 @@ import threading
 import subprocess
 import requests
 import re
+import yt_dlp
+import urllib.request
 import customtkinter as ctk
 from customtkinter import filedialog
-import yt_dlp
+from zipfile import ZipFile
 from PIL import Image
-import pathlib
 
 class GUI:
 
-    version = 0.6
+    version = 0.65
     stopp = False
     
     def __init__(self):
@@ -150,7 +151,22 @@ class GUI:
         # self.decSpeedLimit.grid(row=0, column=3, padx=3)
 
         ctk.CTkLabel(self.bottomFrame, text='B/s').grid(row=0, column=2, padx=5)
-        
+
+        # CHECK ENVIRONMENT VARIABLES --------------------------------------------------------------------------------------------------------------------------------
+        try:
+            result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
+
+            self.SendStatusMessage(result.stdout)
+
+        except Exception as err:
+            self.SendStatusMessage(f'{err}: ffmpeg not setup.') 
+            self.SendStatusMessage('Downloading and setting up ffmpeg.')
+
+            self.SetupFFMPEG()
+
+        # if "C:\\ffmpeg\\bin" not in os.environ:
+        #     self.SendStatusMessage('ffmpeg not setup in environment variable.')
+
         
     
     def MainButton(self):
@@ -253,6 +269,8 @@ class GUI:
                 cmd.extend(['-r', str(limit)]) # apparently YT-DLP takes String for speed limit, fix later
 
             cmd.append('--windows-filenames')
+
+            cmd.append('--no-mtime')
             
             # Format selection
             if self.outputFormat.get() == "Audio only":
@@ -421,5 +439,38 @@ class GUI:
         
         if checkedVer > self.version:
             self.SendStatusMessage('\n-------------------------------------------------------------------------------------\n|\t\t\t\t\t\t|\n|\t\tNew version available.\t\t\t\t|\n|\t\t\t\t\t\t|\n|    https://github.com/Abhi-P-0/YT-DLP_GUI/releases           |\n|\t\t\t\t\t\t|\n-------------------------------------------------------------------------------------')
+
+    def SetupFFMPEG(self):
+        response = requests.get('https://api.github.com/repos/GyanD/codexffmpeg/releases/latest')
+        build = None
+
+        try:
+            rp = response.json()
+
+            for asset in rp.get('assets'):
+                if 'full_build.zip' in asset.get('name'):
+                    buildURL = asset.get('browser_download_url')
+                    buildName = asset.get('name')
+
+                    break
+
+            urllib.request.urlretrieve(buildURL, buildName)
+
+            zipPath = './' + buildName
+            ZipFile(zipPath, 'r').extractall('C:/')
+
+            path = 'C:\\' + buildName[:-4] + '\\bin\\'
+            temp = os.environ['PATH']
+
+            os.environ["PATH"] += os.pathsep + path
+
+            self.SendStatusMessage('FFMPEG downloaded and added to PATH variables, restart the program.')
+            
+        except Exception as err:
+            self.SendStatusMessage(f'Error: {err}')
+            self.SendStatusMessage('Try running the program as admin.')
+
+
+        print(response)
 
 app = GUI()
