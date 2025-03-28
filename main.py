@@ -13,7 +13,7 @@ from PIL import Image
 
 class GUI:
 
-    version = 0.65
+    version = 0.7
     stopp = False
     
     def __init__(self):
