@@ -20,7 +20,7 @@ class GUI:
         self.root = ctk.CTk()
         self.root.title('YT-DLP GUI')
         
-        ctk.set_appearance_mode("System")  # Modes: system, light, dark
+        ctk.set_appearance_mode("dark")  # Modes: system, light, dark
         ctk.set_default_color_theme("blue")
         
         self.height = self.root.winfo_screenwidth()
@@ -156,7 +156,7 @@ class GUI:
         try:
             result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
 
-            self.SendStatusMessage(result.stdout)
+            self.SendStatusMessage(f'FFMPEG is correctly setup.')
 
         except Exception as err:
             self.SendStatusMessage(f'{err}: ffmpeg not setup.') 
@@ -164,11 +164,18 @@ class GUI:
 
             self.SetupFFMPEG()
 
-        # if "C:\\ffmpeg\\bin" not in os.environ:
-        #     self.SendStatusMessage('ffmpeg not setup in environment variable.')
+        try:
+            result = subprocess.run(['yt-dlp'])
 
-        
+            self.SendStatusMessage(f'YT-DLP is correctly setup.')
+
+        except Exception as err:
+            self.SendStatusMessage(f'{err}: YT-DLP not setup.')
+            self.SendStatusMessage('Downloading and setting up YT-DLP.')
+
+            self.SetupYTDLP()
     
+
     def MainButton(self):
         if self.directoryEntry.get() == "":
             self.SendStatusMessage("No output directory.")
@@ -441,36 +448,139 @@ class GUI:
             self.SendStatusMessage('\n-------------------------------------------------------------------------------------\n|\t\t\t\t\t\t|\n|\t\tNew version available.\t\t\t\t|\n|\t\t\t\t\t\t|\n|    https://github.com/Abhi-P-0/YT-DLP_GUI/releases           |\n|\t\t\t\t\t\t|\n-------------------------------------------------------------------------------------')
 
     def SetupFFMPEG(self):
-        response = requests.get('https://api.github.com/repos/GyanD/codexffmpeg/releases/latest')
-        build = None
+        # build = None
 
         try:
-            rp = response.json()
+            folders = os.listdir('./')
+            # ffmpeg_pattern = r'^ffmpeg-\d+\.\d+(\.\d+)?-full_build$'
+            ffmpegFound = False
 
-            for asset in rp.get('assets'):
-                if 'full_build.zip' in asset.get('name'):
-                    buildURL = asset.get('browser_download_url')
-                    buildName = asset.get('name')
+            for folder in folders:
+                t = os.path.isdir(folder)
+
+                if 'ffmpeg' in folder and 'full_build' in folder and os.path.isdir(folder):
+                    self.SendStatusMessage('FFMPEG folder detected')
+                    
+                    ffmpegFound = True
+
+                    buildName = folder
 
                     break
+              
+            
+            if not ffmpegFound:
+                buildURL, buildName  = self.DownloadFFMPEG()
+            
+            # response = requests.get('https://api.github.com/repos/GyanD/codexffmpeg/releases/latest')
+            # rp = response.json()
 
-            urllib.request.urlretrieve(buildURL, buildName)
+            # for asset in rp.get('assets'):
+            #     if 'full_build.zip' in asset.get('name'):
+            #         buildURL = asset.get('browser_download_url')
+            #         buildName = asset.get('name')
 
-            zipPath = './' + buildName
-            ZipFile(zipPath, 'r').extractall('C:/')
+            #         break
 
-            path = 'C:\\' + buildName[:-4] + '\\bin\\'
-            temp = os.environ['PATH']
+            # urllib.request.urlretrieve(buildURL, buildName)
+
+            if '.zip' in buildName:
+                zipPath = './' + buildName
+                ZipFile(zipPath, 'r').extractall('./')
+
+                path = './' + buildName[:-4] + '\\bin\\'
+
+            else:
+                path = './' + buildName + '\\bin\\'
+
+            temp = os.environ['PATH']# + os.pathsep + path
 
             os.environ["PATH"] += os.pathsep + path
+            # subprocess.run(['setx', 'PATH', temp])
 
-            self.SendStatusMessage('FFMPEG downloaded and added to PATH variables, restart the program.')
+            # self.SendStatusMessage('FFMPEG downloaded and added to PATH variables, restart the program.')
+
+            self.SendStatusMessage(f'FFMPEG is setup. Program is ready to use.')
+
+            temp = os.environ['PATH']
+
+            # print(temp)
+
+            result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
+
+            # self.SendStatusMessage(result)
             
         except Exception as err:
             self.SendStatusMessage(f'Error: {err}')
             self.SendStatusMessage('Try running the program as admin.')
 
+    def DownloadFFMPEG(self):
+        response = requests.get('https://api.github.com/repos/GyanD/codexffmpeg/releases/latest')
+        rp = response.json()
 
-        print(response)
+        for asset in rp.get('assets'):
+            if 'full_build.zip' in asset.get('name'):
+                buildURL = asset.get('browser_download_url')
+                buildName = asset.get('name')
+
+                break
+
+        urllib.request.urlretrieve(buildURL, buildName)
+
+        return buildURL, buildName
+    
+    def SetupYTDLP(self):
+
+        try:
+            folders = os.listdir('./')
+            ytdlpFound = False
+
+            for folder in folders:
+                t = os.path.isdir(folder)
+
+                if 'yt-dlp.exe' in folder and not os.path.isdir(folder):
+                    self.SendStatusMessage('yt-dlp detected.')
+                    
+                    ytdlpFound = True
+
+                    buildName = folder
+
+                    break
+              
+            
+            if not ytdlpFound:
+                buildName  = self.DownloadYTDLP()                       
+            
+            path = './'
+
+            temp = os.environ['PATH']# + os.pathsep + path
+
+            os.environ["PATH"] += os.pathsep + path
+            
+            self.SendStatusMessage(f'YT-DLP is setup. Program is ready to use.')
+
+            temp = os.environ['PATH']
+
+            result = subprocess.run(["yt-dlp"], capture_output=True, text=True)
+
+            # self.SendStatusMessage(result)
+            
+        except Exception as err:
+            self.SendStatusMessage(f'Error: {err}')
+            self.SendStatusMessage('Try running the program as admin.')
+
+    def DownloadYTDLP(self):
+        response = requests.get('https://github.com/yt-dlp/yt-dlp/releases')
+        rp = response.json()
+
+        for asset in rp.get('assets'):
+            if 'yt-dlp.exe' in asset.get('name'):
+                buildURL = asset.get('browser_download_url')
+                buildName = asset.get('name')
+
+                break
+
+        urllib.request.urlretrieve(buildURL, buildName)
+
+        return buildName
 
 app = GUI()
