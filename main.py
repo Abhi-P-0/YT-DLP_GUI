@@ -13,7 +13,7 @@ from PIL import Image
 
 class GUI:
 
-    version = 0.7
+    version = 0.75
     stopp = False
     
     def __init__(self):
@@ -30,6 +30,8 @@ class GUI:
         self.SetupUI()
 
         self.CheckForUpdate()
+
+        self.CheckENV()
 
         self.root.mainloop()
 
@@ -116,6 +118,10 @@ class GUI:
         self.splitChapters = ctk.CTkCheckBox(self.configFrame, text='')
         self.splitChapters.grid(row=4, column=1, padx=5, pady=5)
 
+        ctk.CTkLabel(self.configFrame, text='Rename split chapters to use chapter name').grid(row=5, column=0, padx=(15, 5), pady=5)
+        self.renameChapters = ctk.CTkCheckBox(self.configFrame, text='')
+        self.renameChapters.grid(row=5, column=1, padx=5, pady=5)
+
         # ctk.CTkLabel(self.configFrame, text='Playlist').grid(row=5, column=0, padx=(15, 5), pady=5)
         # self.playlistSelector = ctk.CTkCheckBox(self.configFrame, text='')
         # self.playlistSelector.grid(row=5, column=1, padx=5, pady=5)
@@ -152,6 +158,8 @@ class GUI:
 
         ctk.CTkLabel(self.bottomFrame, text='B/s').grid(row=0, column=2, padx=5)
 
+
+    def CheckENV(self):
         # CHECK ENVIRONMENT VARIABLES --------------------------------------------------------------------------------------------------------------------------------
         try:
             result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
@@ -258,7 +266,7 @@ class GUI:
             if self.splitChapters.get() and numChaps != None:
                 # Set BASE directory with -P (static path)
                 if 'title' not in output_dir:
-                    output_dir += info_dict.get('title') + '/'
+                    output_dir += self.sanitize_filename(info_dict.get('title')) + '/'
                 
                 # Then use -o to create subfolder structure within it
                 cmd.extend(['-o', 'full-vid/%(title)s.%(ext)s'])  # Folder will use actual title
@@ -332,18 +340,41 @@ class GUI:
                         # Send all non-download messages
                         self.SendStatusMessage(line.strip())
             
+            if self.renameChapters.get():
+                # Modify all chapter files to use chapter names
+                if self.splitChapters.get() and numChaps != None:
+                    base_dir = self.directoryEntry.get()
+                    title_dir = os.path.join(base_dir, self.sanitize_filename(info_dict.get('title')))
+                    chapters_dir = title_dir# os.path.join(title_dir, "full-vid")
+                    
+                    self.SendStatusMessage(f"Looking for chapter files in: {chapters_dir}")
+                    
+                    if os.path.exists(chapters_dir) and os.path.isdir(chapters_dir):
+                        chapter_files = os.listdir(chapters_dir)
+                        self.SendStatusMessage(f"Found {len(chapter_files)} files in chapter directory")
+                        
+                        for i, (file, chapterTitle) in enumerate(zip(chapter_files[1:], numChaps)):
+                            try:
+                                dir_name = os.path.dirname(chapters_dir)
+                                file_path = chapters_dir + '/' + file
+                                file_name = os.path.basename(file_path)
+                                root, ext = os.path.splitext(file_name)
+                                new_root = str(i) + ' - ' + chapterTitle['title']
+                                new_path = os.path.join(chapters_dir, f"{new_root}{ext}")
+                                
+                                # Attempt rename
+                                os.rename(file_path, new_path)
+                                self.SendStatusMessage(f"Renamed: {file_path} → {new_path}")
+                            
+                            except Exception as e:
+                                self.SendStatusMessage(f"Failed to rename {file_path}: {str(e)}")
+                        
+                    else:
+                        self.SendStatusMessage(f"Chapter directory not found: {chapters_dir}")
+
             if process.returncode == 0:
                 self.SendStatusMessage("Download completed successfully")
-
-                # Modify all chapter files to use chapter names
-                # if self.splitChapters.get() and numChaps != None:
-                #     temp = self.directoryEntry.get() + "/" + info_dict.get('title')
-
-                #     for dir, subdirs, files in os.walk(self.directoryEntry.get()):
-                #         print(dir, subdirs, files)
-
-                #     print(temp)
-
+                
             elif self.stopp:
                 self.SendStatusMessage(f'Download interupted')
 
@@ -440,6 +471,10 @@ class GUI:
             self.directoryEntry.delete(0, ctk.END)
             self.directoryEntry.insert(0, fileOutputPath)
 
+    def sanitize_filename(self, filename):
+        """Remove characters that are invalid for Windows filenames."""
+        return re.sub(r'[\\/:*?"<>|]', '_', filename)
+
     def CheckForUpdate(self):
         response = requests.get('https://github.com/Abhi-P-0/YT-DLP_GUI/releases/latest')
         checkedVer = float(response.url.split('/').pop()[1:]) # Version on github (latest)
@@ -471,18 +506,6 @@ class GUI:
             if not ffmpegFound:
                 buildURL, buildName  = self.DownloadFFMPEG()
             
-            # response = requests.get('https://api.github.com/repos/GyanD/codexffmpeg/releases/latest')
-            # rp = response.json()
-
-            # for asset in rp.get('assets'):
-            #     if 'full_build.zip' in asset.get('name'):
-            #         buildURL = asset.get('browser_download_url')
-            #         buildName = asset.get('name')
-
-            #         break
-
-            # urllib.request.urlretrieve(buildURL, buildName)
-
             if '.zip' in buildName:
                 zipPath = './' + buildName
                 ZipFile(zipPath, 'r').extractall('./')
@@ -499,7 +522,7 @@ class GUI:
 
             # self.SendStatusMessage('FFMPEG downloaded and added to PATH variables, restart the program.')
 
-            self.SendStatusMessage(f'FFMPEG is setup. Program is ready to use.')
+            self.SendStatusMessage(f'FFMPEG has been setup.')
 
             temp = os.environ['PATH']
 
@@ -546,17 +569,16 @@ class GUI:
 
                     break
               
-            
             if not ytdlpFound:
-                buildName  = self.DownloadYTDLP()                       
-            
+                buildName  = self.DownloadYTDLP()
+
             path = './'
 
             temp = os.environ['PATH']# + os.pathsep + path
 
             os.environ["PATH"] += os.pathsep + path
             
-            self.SendStatusMessage(f'YT-DLP is setup. Program is ready to use.')
+            self.SendStatusMessage(f'YT-DLP has been setup.')
 
             temp = os.environ['PATH']
 
@@ -569,16 +591,16 @@ class GUI:
             self.SendStatusMessage('Try running the program as admin.')
 
     def DownloadYTDLP(self):
-        response = requests.get('https://github.com/yt-dlp/yt-dlp/releases')
-        rp = response.json()
-
+        response = requests.get('https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest')        
+        rp = response.json()        
+        
         for asset in rp.get('assets'):
             if 'yt-dlp.exe' in asset.get('name'):
                 buildURL = asset.get('browser_download_url')
                 buildName = asset.get('name')
 
                 break
-
+        
         urllib.request.urlretrieve(buildURL, buildName)
 
         return buildName
