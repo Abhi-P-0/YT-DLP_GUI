@@ -31,7 +31,7 @@ class GUI:
 
         self.CheckForUpdate()
 
-        self.CheckENV()
+        threading.Thread(target=self.CheckENV, args=()).start()
 
         self.root.mainloop()
 
@@ -122,11 +122,13 @@ class GUI:
         self.renameChapters = ctk.CTkCheckBox(self.configFrame, text='')
         self.renameChapters.grid(row=5, column=1, padx=5, pady=5)
 
+        ctk.CTkLabel(self.configFrame, text='Keep chapter index when renamed').grid(row=6, column=0, padx=(15, 5), pady=5)
+        self.keepRenameChaptersIndex = ctk.CTkCheckBox(self.configFrame, text='')
+        self.keepRenameChaptersIndex.grid(row=6, column=1, padx=5, pady=5)
+
         # ctk.CTkLabel(self.configFrame, text='Playlist').grid(row=5, column=0, padx=(15, 5), pady=5)
         # self.playlistSelector = ctk.CTkCheckBox(self.configFrame, text='')
-        # self.playlistSelector.grid(row=5, column=1, padx=5, pady=5)
-        
-
+        # self.playlistSelector.grid(row=5, column=1, padx=5, pady=5)        
 
         self.stoppButton = ctk.CTkButton(self.configFrame, text='Interupt Download', command=self.InteruptDownload, fg_color='red')
         self.stoppButton.grid(row=20, column=0, padx=5, pady=5, sticky='nsew')
@@ -162,7 +164,7 @@ class GUI:
     def CheckENV(self):
         # CHECK ENVIRONMENT VARIABLES --------------------------------------------------------------------------------------------------------------------------------
         try:
-            result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
+            subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
 
             self.SendStatusMessage(f'FFMPEG is correctly setup.')
 
@@ -173,7 +175,7 @@ class GUI:
             self.SetupFFMPEG()
 
         try:
-            result = subprocess.run(['yt-dlp'])
+            subprocess.run(['yt-dlp'])
 
             self.SendStatusMessage(f'YT-DLP is correctly setup.')
 
@@ -195,7 +197,7 @@ class GUI:
 
             return
 
-        threading.Thread(target=self.DLManager, args=()).start()        
+        threading.Thread(target=self.DLManager, args=()).start()
 
     def DLManager(self):
         info = self.GetInfo(self.urlEntry.get())
@@ -271,6 +273,7 @@ class GUI:
                 # Then use -o to create subfolder structure within it
                 cmd.extend(['-o', 'full-vid/%(title)s.%(ext)s'])  # Folder will use actual title
                 cmd.append('--split-chapters')
+
             else:
                 cmd.extend(['-o', '%(title)s.%(ext)s'])
 
@@ -341,6 +344,8 @@ class GUI:
                         self.SendStatusMessage(line.strip())
             
             if self.renameChapters.get():
+                time.sleep(1)
+
                 # Modify all chapter files to use chapter names
                 if self.splitChapters.get() and numChaps != None:
                     base_dir = self.directoryEntry.get()
@@ -355,16 +360,24 @@ class GUI:
                         
                         for i, (file, chapterTitle) in enumerate(zip(chapter_files[1:], numChaps)):
                             try:
-                                dir_name = os.path.dirname(chapters_dir)
+                                # dir_name = os.path.dirname(chapters_dir)
                                 file_path = chapters_dir + '/' + file
                                 file_name = os.path.basename(file_path)
                                 root, ext = os.path.splitext(file_name)
-                                new_root = str(i) + ' - ' + chapterTitle['title']
+
+                                if self.keepRenameChaptersIndex.get():
+                                    new_root = str(i) + ' - ' + chapterTitle['title']
+
+                                else:
+                                    new_root = chapterTitle['title']
+                                    
                                 new_path = os.path.join(chapters_dir, f"{new_root}{ext}")
                                 
                                 # Attempt rename
                                 os.rename(file_path, new_path)
                                 self.SendStatusMessage(f"Renamed: {file_path} → {new_path}")
+
+                                time.sleep(0.8)
                             
                             except Exception as e:
                                 self.SendStatusMessage(f"Failed to rename {file_path}: {str(e)}")
@@ -483,16 +496,11 @@ class GUI:
             self.SendStatusMessage('\n-------------------------------------------------------------------------------------\n|\t\t\t\t\t\t|\n|\t\tNew version available.\t\t\t\t|\n|\t\t\t\t\t\t|\n|    https://github.com/Abhi-P-0/YT-DLP_GUI/releases           |\n|\t\t\t\t\t\t|\n-------------------------------------------------------------------------------------')
 
     def SetupFFMPEG(self):
-        # build = None
-
         try:
             folders = os.listdir('./')
-            # ffmpeg_pattern = r'^ffmpeg-\d+\.\d+(\.\d+)?-full_build$'
             ffmpegFound = False
 
             for folder in folders:
-                t = os.path.isdir(folder)
-
                 if 'ffmpeg' in folder and 'full_build' in folder and os.path.isdir(folder):
                     self.SendStatusMessage('FFMPEG folder detected')
                     
@@ -500,11 +508,10 @@ class GUI:
 
                     buildName = folder
 
-                    break
-              
+                    break              
             
             if not ffmpegFound:
-                buildURL, buildName  = self.DownloadFFMPEG()
+                buildName  = self.DownloadFFMPEG()
             
             if '.zip' in buildName:
                 zipPath = './' + buildName
@@ -515,22 +522,9 @@ class GUI:
             else:
                 path = './' + buildName + '\\bin\\'
 
-            temp = os.environ['PATH']# + os.pathsep + path
-
             os.environ["PATH"] += os.pathsep + path
-            # subprocess.run(['setx', 'PATH', temp])
-
-            # self.SendStatusMessage('FFMPEG downloaded and added to PATH variables, restart the program.')
-
+            
             self.SendStatusMessage(f'FFMPEG has been setup.')
-
-            temp = os.environ['PATH']
-
-            # print(temp)
-
-            result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
-
-            # self.SendStatusMessage(result)
             
         except Exception as err:
             self.SendStatusMessage(f'Error: {err}')
@@ -549,7 +543,7 @@ class GUI:
 
         urllib.request.urlretrieve(buildURL, buildName)
 
-        return buildURL, buildName
+        return buildName
     
     def SetupYTDLP(self):
 
@@ -558,33 +552,23 @@ class GUI:
             ytdlpFound = False
 
             for folder in folders:
-                t = os.path.isdir(folder)
-
                 if 'yt-dlp.exe' in folder and not os.path.isdir(folder):
                     self.SendStatusMessage('yt-dlp detected.')
                     
                     ytdlpFound = True
 
-                    buildName = folder
-
                     break
               
             if not ytdlpFound:
-                buildName  = self.DownloadYTDLP()
+                self.DownloadYTDLP()
 
             path = './'
-
-            temp = os.environ['PATH']# + os.pathsep + path
 
             os.environ["PATH"] += os.pathsep + path
             
             self.SendStatusMessage(f'YT-DLP has been setup.')
 
-            temp = os.environ['PATH']
-
-            result = subprocess.run(["yt-dlp"], capture_output=True, text=True)
-
-            # self.SendStatusMessage(result)
+            subprocess.run(["yt-dlp"], capture_output=True, text=True)
             
         except Exception as err:
             self.SendStatusMessage(f'Error: {err}')
@@ -602,7 +586,5 @@ class GUI:
                 break
         
         urllib.request.urlretrieve(buildURL, buildName)
-
-        return buildName
 
 app = GUI()
